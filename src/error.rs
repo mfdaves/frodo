@@ -16,4 +16,13 @@ pub enum MidiError {
 
     #[error("Not a status byte, MSB should be 1")]
     InvalidStatusByte,
+
+    #[error("Not a valid Header")]
+    InvalidHeaderByte,
+
+    #[error("Not a valid MidiFormat")]
+    InvalidFormat, 
+
+    #[error("Not a valid VQL input: {0}")]
+    InvalidVqlInput(u32)
 }

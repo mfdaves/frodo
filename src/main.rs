@@ -1,9 +1,23 @@
-use frodo::MidiMessage;
+use frodo::*;
+use std::fs::File; 
+use std::io::Read;
 
-fn main() {
-    let status_byte = 0x92;
-    let msg = MidiMessage::from_status_byte(status_byte).unwrap();
-    println!("{:?}", msg);
+
+
+fn main(){
+    let mut file = File::open("/home/mfdaves/Downloads/Zelda.mid").unwrap();
+
+    let mut buffer = vec![0u8;14];
+
+    println!("{:?}", &file);
+
+    let foo = file.read_exact(&mut buffer);
+
+    println!("{:?}", &buffer);
+
+    let header = Header::from_bytes(&buffer);
+
+    println!("{:?}", header);
 }
 
 
