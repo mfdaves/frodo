@@ -11,14 +11,21 @@ pub struct Header {
 
 impl Header {
     pub const FIXED_HEADER_LENGTH: u32 = 6;
-    pub fn new(format: MidiFormat, track_count: u16, division: i16) -> Self {
-        Self {
+    pub fn new(
+        format: MidiFormat,
+        track_count: u16,
+        division: i16,
+    ) -> Result<Self, MidiError> {
+        if format == MidiFormat::SingleTrack && track_count != 1 {
+            return Err(MidiError::InvalidHeaderByte); // Or a more specific error
+        }
+        Ok(Self {
             chunk_type: ChunkType::Header,
             length: Header::FIXED_HEADER_LENGTH,
             format,
             track_count,
             division,
-        }
+        })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -68,7 +75,7 @@ impl Header {
 }
 
 #[repr(u16)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MidiFormat {
     SingleTrack = 0,
     MultipleTrack = 1,

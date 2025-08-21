@@ -30,11 +30,4 @@ impl TryFrom<u8> for MidiEvent {
     }
 }
 
-impl MidiEvent {
-    pub fn expected_data_count(&self) -> usize {
-        match self {
-            MidiEvent::ProgramChange | MidiEvent::ChannelPressure => 1,
-            _ => 2,
-        }
-    }
-}
+

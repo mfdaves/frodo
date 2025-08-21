@@ -7,13 +7,17 @@ pub mod system_common;
 pub mod header;
 pub mod chunktype;
 pub mod track;
+pub mod meta;
+pub mod domain;
 
 pub use channel::Channel;
 pub use error::MidiError;
 pub use event::MidiEvent;
-pub use message::{CompleteMidiMessage, MidiData, MidiMessage};
+pub use message::{MidiMessage, Status};
 pub use real_time::RealTimeMessage;
 pub use system_common::SystemCommonEvent;
 pub use header::*;
 pub use chunktype::*;
 pub use track::*;
+pub use meta::*;
+pub use domain::*;
