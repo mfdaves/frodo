@@ -1,7 +1,7 @@
 use crate::error::MidiError;
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Channel(u8);
 
 impl TryFrom<u8> for Channel {

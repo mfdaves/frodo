@@ -1,6 +1,6 @@
 use crate::track::Vql;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MetaEvent {
     TrackName(Vec<u8>),
     EndOfTrack,

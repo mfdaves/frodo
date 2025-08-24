@@ -2,7 +2,7 @@ use crate::error::MidiError;
 use std::convert::TryFrom;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RealTimeMessage {
     TimingClock = 0xF8,
     Reserved1 = 0xF9,

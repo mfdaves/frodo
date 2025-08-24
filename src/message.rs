@@ -1,21 +1,23 @@
 use crate::channel::Channel;
 use crate::domain::{Control, Note, Pressure, Program, Velocity};
 use crate::error::MidiError;
-use crate::event::MidiEvent;
 use crate::real_time::RealTimeMessage;
 use crate::system_common::SystemCommonEvent;
 use std::convert::TryFrom;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    Channel { event: MidiEvent, channel: Channel },
+    Channel { event_type: u8, channel: Channel },
     SystemCommon(SystemCommonEvent),
     RealTime(RealTimeMessage),
 }
 
 impl Status {
-    pub fn channel(event: MidiEvent, channel: Channel) -> Self {
-        Status::Channel { event, channel }
+    pub fn channel(event_type: u8, channel: Channel) -> Self {
+        Status::Channel {
+            event_type,
+            channel,
+        }
     }
 
     pub fn system_common(sys_comm: SystemCommonEvent) -> Self {
@@ -33,9 +35,12 @@ impl Status {
 
         match byte {
             0x80..=0xEF => {
-                let event = MidiEvent::try_from((byte >> 4) & 0x07)?;
+                let event_type = (byte >> 4) & 0x07;
                 let channel = Channel::try_from(byte & 0x0F)?;
-                Ok(Status::Channel { event, channel })
+                Ok(Status::Channel {
+                    event_type,
+                    channel,
+                })
             }
             0xF0..=0xF7 => {
                 let sys_val = byte & 0x0F;
@@ -52,14 +57,17 @@ impl Status {
 
     pub fn to_status_byte(&self) -> u8 {
         match self {
-            Status::Channel { event, channel } => 0x80 | ((*event as u8) << 4) | channel.value(),
+            Status::Channel {
+                event_type,
+                channel,
+            } => 0x80 | (event_type << 4) | channel.value(),
             Status::SystemCommon(sys) => 0xF0 | (*sys as u8),
             Status::RealTime(rt) => *rt as u8,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelMessage {
     NoteOff { note: Note, velocity: Velocity },
     NoteOn { note: Note, velocity: Velocity },
@@ -70,7 +78,71 @@ pub enum ChannelMessage {
     PitchBend { value: u16 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl ChannelMessage {
+    pub fn event_type(&self) -> u8 {
+        match self {
+            ChannelMessage::NoteOff { .. } => 0,
+            ChannelMessage::NoteOn { .. } => 1,
+            ChannelMessage::PolyphonicKeyPressure { .. } => 2,
+            ChannelMessage::ControlChange { .. } => 3,
+            ChannelMessage::ProgramChange { .. } => 4,
+            ChannelMessage::ChannelPressure { .. } => 5,
+            ChannelMessage::PitchBend { .. } => 6,
+        }
+    }
+
+    fn from_event_type(event_type: u8, data: &[u8]) -> Result<(ChannelMessage, usize), MidiError> {
+        match event_type {
+            0 => Ok((
+                ChannelMessage::NoteOff {
+                    note: Note::new(data[0])?,
+                    velocity: Velocity::new(data[1])?,
+                },
+                2,
+            )),
+            1 => Ok((
+                ChannelMessage::NoteOn {
+                    note: Note::new(data[0])?,
+                    velocity: Velocity::new(data[1])?,
+                },
+                2,
+            )),
+            2 => Ok((
+                ChannelMessage::PolyphonicKeyPressure {
+                    note: Note::new(data[0])?,
+                    pressure: Pressure::new(data[1])?,
+                },
+                2,
+            )),
+            3 => Ok((
+                ChannelMessage::ControlChange {
+                    control: Control::new(data[0])?,
+                    value: Control::new(data[1])?,
+                },
+                2,
+            )),
+            4 => Ok((
+                ChannelMessage::ProgramChange {
+                    program: Program::new(data[0])?,
+                },
+                1,
+            )),
+            5 => Ok((
+                ChannelMessage::ChannelPressure {
+                    pressure: Pressure::new(data[0])?,
+                },
+                1,
+            )),
+            6 => {
+                let value = u16::from(data[1]) << 7 | u16::from(data[0]);
+                Ok((ChannelMessage::PitchBend { value }, 2))
+            }
+            _ => Err(MidiError::InvalidEvent(event_type)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MidiMessage {
     Channel {
         channel: Channel,
@@ -84,8 +156,11 @@ impl MidiMessage {
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), MidiError> {
         let status = Status::from_status_byte(bytes[0])?;
         let (message, len) = match status {
-            Status::Channel { event, channel } => {
-                let (msg, len) = Self::parse_channel_message(event, &bytes[1..])?;
+            Status::Channel {
+                event_type,
+                channel,
+            } => {
+                let (msg, len) = ChannelMessage::from_event_type(event_type, &bytes[1..])?;
                 (
                     MidiMessage::Channel {
                         channel,
@@ -98,57 +173,5 @@ impl MidiMessage {
             Status::RealTime(rt) => (MidiMessage::RealTime(rt), 1),
         };
         Ok((message, len))
-    }
-
-    fn parse_channel_message(
-        event: MidiEvent,
-        data: &[u8],
-    ) -> Result<(ChannelMessage, usize), MidiError> {
-        match event {
-            MidiEvent::NoteOff => Ok((
-                ChannelMessage::NoteOff {
-                    note: Note::new(data[0])?,
-                    velocity: Velocity::new(data[1])?,
-                },
-                2,
-            )),
-            MidiEvent::NoteOn => Ok((
-                ChannelMessage::NoteOn {
-                    note: Note::new(data[0])?,
-                    velocity: Velocity::new(data[1])?,
-                },
-                2,
-            )),
-            MidiEvent::PolyphonicKeyPressure => Ok((
-                ChannelMessage::PolyphonicKeyPressure {
-                    note: Note::new(data[0])?,
-                    pressure: Pressure::new(data[1])?,
-                },
-                2,
-            )),
-            MidiEvent::ControlChange => Ok((
-                ChannelMessage::ControlChange {
-                    control: Control::new(data[0])?,
-                    value: Control::new(data[1])?,
-                },
-                2,
-            )),
-            MidiEvent::ProgramChange => Ok((
-                ChannelMessage::ProgramChange {
-                    program: Program::new(data[0])?,
-                },
-                1,
-            )),
-            MidiEvent::ChannelPressure => Ok((
-                ChannelMessage::ChannelPressure {
-                    pressure: Pressure::new(data[0])?,
-                },
-                1,
-            )),
-            MidiEvent::PitchBend => {
-                let value = u16::from(data[1]) << 7 | u16::from(data[0]);
-                Ok((ChannelMessage::PitchBend { value }, 2))
-            }
-        }
     }
 }

@@ -1,42 +1,99 @@
 use crate::chunktype::ChunkType;
+use crate::domain::*;
 use crate::error::MidiError;
-use crate::event::MidiEvent;
 use crate::message::{ChannelMessage, MidiMessage, Status};
+use crate::{Channel, Velocity};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 
 #[derive(Debug, Clone)]
 pub struct Track {
     chunk_type: ChunkType,
-    #[allow(dead_code)]
     length: u32,
     events: Vec<TrackEvent>,
+    name: String,
 }
 
 impl Track {
     pub fn new(events: Vec<TrackEvent>) -> Self {
+        let len = events.iter().map(|x| x.to_bytes().len() as u32).sum();
         Self {
             chunk_type: ChunkType::Track,
-            length: 0, // Will be calculated in to_bytes
+            length: len, // Will be calculated in to_bytes
             events,
+            name: Default::default(),
         }
+    }
+
+    // maybe a add_name_event method
+    // for add in the first place
+
+    pub fn with_name<S: AsRef<str>>(mut self, name: S) -> Self {
+        self.name = name.as_ref().to_string();
+        self.events.insert(0, TrackEvent::track_name(name));
+        self
+    }
+
+    pub fn set_name<S: AsRef<str>>(&mut self, name: S) {
+        self.name = name.as_ref().to_string();
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut track_data = Vec::new();
-        for event in &self.events {
-            track_data.extend(event.to_bytes());
-        }
+        // use std::collections::HashMap;
 
-        let mut bytes = Vec::new();
+        let mut cache: HashMap<&TrackEvent, Vec<u8>> = HashMap::new();
+
+        let total_len: usize = self
+            .events
+            .iter()
+            .map(|event| cache.entry(event).or_insert_with(|| event.to_bytes()).len())
+            .sum();
+
+        let mut bytes = Vec::with_capacity(4 + 4 + total_len); // chunk_type + length + track_data
+
+        // Chunk type
         bytes.extend_from_slice(&self.chunk_type.as_bytes());
-        bytes.extend_from_slice(&(track_data.len() as u32).to_be_bytes());
-        bytes.extend(track_data);
+
+        bytes.extend_from_slice(&(total_len as u32).to_be_bytes());
+
+        self.events.iter().for_each(|event| {
+            let event_bytes = cache.get(event).unwrap();
+            bytes.extend_from_slice(event_bytes);
+        });
 
         bytes
     }
+
+    pub fn add_event(&mut self, event: TrackEvent) {
+        // if events is empty we add first track name and then we add
+        self.events.push(event);
+    }
+
+    pub fn length(&self) -> usize {
+        self.length as usize
+    }
 }
 
-#[derive(Debug, Clone)]
+// need to put track_name first and EOT
+// if a TRACKANME or EOT will found I
+// impl From<&[TrackEvent]> for Track {
+//     fn from(value: &[TrackEvent]) -> Self {
+//         let events = value.to_vec();
+//     }
+// }
+
+impl Default for Track {
+    fn default() -> Self {
+        Self {
+            chunk_type: ChunkType::Track,
+            length: 0,
+            events: Vec::new(),
+            name: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EventType {
     Midi(MidiMessage),
     Meta(crate::meta::MetaEvent),
@@ -50,18 +107,8 @@ impl EventType {
                 let mut bytes = Vec::new();
                 match msg {
                     MidiMessage::Channel { channel, message } => {
-                        let event = match message {
-                            ChannelMessage::NoteOff { .. } => MidiEvent::NoteOff,
-                            ChannelMessage::NoteOn { .. } => MidiEvent::NoteOn,
-                            ChannelMessage::PolyphonicKeyPressure { .. } => {
-                                MidiEvent::PolyphonicKeyPressure
-                            }
-                            ChannelMessage::ControlChange { .. } => MidiEvent::ControlChange,
-                            ChannelMessage::ProgramChange { .. } => MidiEvent::ProgramChange,
-                            ChannelMessage::ChannelPressure { .. } => MidiEvent::ChannelPressure,
-                            ChannelMessage::PitchBend { .. } => MidiEvent::PitchBend,
-                        };
-                        let status = Status::channel(event, *channel);
+                        let event_type = message.event_type();
+                        let status = Status::channel(event_type, *channel);
                         bytes.push(status.to_status_byte());
 
                         match message {
@@ -110,7 +157,7 @@ impl EventType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TrackEvent {
     pub v_time: Vql,
     pub event: EventType,
@@ -127,11 +174,34 @@ impl TrackEvent {
         bytes
     }
 
-    pub fn track_name<S: AsRef<str>>(name: S) -> Self {
-        let bytes = name.as_ref().as_bytes().to_vec();
-        TrackEvent {
+    pub fn meta_event(event: crate::meta::MetaEvent) -> Self {
+        Self {
             v_time: Vql::zero(),
-            event: EventType::Meta(crate::meta::MetaEvent::TrackName(bytes)),
+            event: EventType::Meta(event),
+        }
+    }
+    pub fn track_name<S: AsRef<str>>(name: S) -> Self {
+        Self::meta_event(crate::meta::MetaEvent::TrackName(
+            name.as_ref().as_bytes().to_vec(),
+        ))
+    }
+    pub fn end_track() -> Self {
+        Self::meta_event(crate::meta::MetaEvent::EndOfTrack)
+    }
+
+    pub fn note_on(delta_time: Vql, channel: Channel, note: Note, velocity: Velocity) -> Self {
+        let message = ChannelMessage::NoteOn { note, velocity };
+        Self {
+            v_time: delta_time,
+            event: EventType::Midi(MidiMessage::Channel { channel, message }),
+        }
+    }
+
+    pub fn note_off(delta_time: Vql, channel: Channel, note: Note, velocity: Velocity) -> Self {
+        let message = ChannelMessage::NoteOff { note, velocity };
+        Self {
+            v_time: delta_time,
+            event: EventType::Midi(MidiMessage::Channel { channel, message }),
         }
     }
 }
@@ -146,7 +216,7 @@ impl TrackEvent {
 // max value of 2^28-1 = 268435455 = 0x0FFF_FFFF
 // Meaning: it's the delta time beetwen THIS track event
 // and the previous one.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Vql(u32);
 
 impl Vql {

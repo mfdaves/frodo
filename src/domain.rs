@@ -2,7 +2,7 @@ use crate::error::MidiError;
 
 macro_rules! midi_value {
     ($name:ident, $kind:literal) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub struct $name(u8);
 
         impl TryFrom<u8> for $name {
@@ -12,10 +12,7 @@ macro_rules! midi_value {
                 if value <= 127 {
                     Ok($name(value))
                 } else {
-                    Err(MidiError::InvalidMidiValue {
-                        kind: $kind,
-                        value,
-                    })
+                    Err(MidiError::InvalidMidiValue { kind: $kind, value })
                 }
             }
         }

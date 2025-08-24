@@ -11,11 +11,7 @@ pub struct Header {
 
 impl Header {
     pub const FIXED_HEADER_LENGTH: u32 = 6;
-    pub fn new(
-        format: MidiFormat,
-        track_count: u16,
-        division: i16,
-    ) -> Result<Self, MidiError> {
+    pub fn new(format: MidiFormat, track_count: u16, division: i16) -> Result<Self, MidiError> {
         if format == MidiFormat::SingleTrack && track_count != 1 {
             return Err(MidiError::InvalidHeaderByte); // Or a more specific error
         }
@@ -71,6 +67,10 @@ impl Header {
             track_count,
             division,
         })
+    }
+
+    pub fn track_count(&self) -> usize {
+        self.track_count as usize
     }
 }
 
