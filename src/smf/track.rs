@@ -2,9 +2,11 @@ use crate::chunktype::ChunkType;
 use crate::domain::*;
 use crate::error::MidiError;
 use crate::message::{ChannelMessage, MidiMessage, Status};
+use crate::meta::MetaEvent;
 use crate::{Channel, Velocity};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+//need to add the status running
 
 #[derive(Debug, Clone)]
 pub struct Track {
@@ -17,6 +19,10 @@ pub struct Track {
 impl Track {
     pub fn new(events: Vec<TrackEvent>) -> Self {
         let len = events.iter().map(|x| x.to_bytes().len() as u32).sum();
+
+        // this is a falsy assunmption because the length of the track could be different
+        // from the sum of each event, because many of them could have easily the status byte,
+        // so it depends on it, I know I'm not handling yet this case.
         Self {
             chunk_type: ChunkType::Track,
             length: len, // Will be calculated in to_bytes
@@ -39,8 +45,6 @@ impl Track {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        // use std::collections::HashMap;
-
         let mut cache: HashMap<&TrackEvent, Vec<u8>> = HashMap::new();
 
         let total_len: usize = self
@@ -65,12 +69,33 @@ impl Track {
     }
 
     pub fn add_event(&mut self, event: TrackEvent) {
-        // if events is empty we add first track name and then we add
         self.events.push(event);
     }
 
     pub fn length(&self) -> usize {
         self.length as usize
+    }
+
+    pub fn note_on(
+        &mut self,
+        delta_time: Vql,
+        channel: Channel,
+        note: Note,
+        velocity: Velocity,
+    ) -> &mut Self {
+        self.add_event(TrackEvent::note_on(delta_time, channel, note, velocity));
+        self
+    }
+
+    pub fn note_off(
+        &mut self,
+        delta_time: Vql,
+        channel: Channel,
+        note: Note,
+        velocity: Velocity,
+    ) -> &mut Self {
+        self.add_event(TrackEvent::note_off(delta_time, channel, note, velocity));
+        self
     }
 }
 
@@ -96,7 +121,7 @@ impl Default for Track {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EventType {
     Midi(MidiMessage),
-    Meta(crate::meta::MetaEvent),
+    Meta(MetaEvent),
     Sysex(Vec<u8>),
 }
 

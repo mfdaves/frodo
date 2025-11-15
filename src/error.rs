@@ -28,4 +28,8 @@ pub enum MidiError {
 
     #[error("Not a valid VQL input: {0}")]
     InvalidVqlInput(u32),
+
+
+    #[error("Not a valid str note")]
+    InvalidNote
 }

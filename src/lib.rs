@@ -1,23 +1,9 @@
-pub mod channel;
-pub mod chunktype;
 pub mod domain;
 pub mod error;
-pub mod header;
-pub mod message;
-pub mod meta;
-pub mod real_time;
+pub mod midi;
 pub mod smf;
-pub mod system_common;
-pub mod track;
 
-pub use channel::Channel;
-pub use chunktype::*;
 pub use domain::*;
-pub use error::MidiError;
-pub use header::*;
-pub use message::{ChannelMessage, MidiMessage, Status};
-pub use meta::*;
-pub use real_time::RealTimeMessage;
+pub use error::*;
+pub use midi::*;
 pub use smf::*;
-pub use system_common::SystemCommonEvent;
-pub use track::*;
